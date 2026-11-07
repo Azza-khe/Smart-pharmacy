@@ -1,0 +1,9 @@
+medicine_id,atc_code,category_name
+M001,M01AB,Anti-inflammatory/antirheumatic: acetic acid derivatives
+M002,M01AE,Anti-inflammatory/antirheumatic: propionic acid derivatives
+M003,N02BA,Analgesics: salicylic acid and derivatives
+M004,N02BE,Analgesics: pyrazolones and anilides
+M005,N05B,Anxiolytics
+M006,N05C,Hypnotics and sedatives
+M007,R03,Drugs for obstructive airway diseases
+M008,R06,Antihistamines for systemic use

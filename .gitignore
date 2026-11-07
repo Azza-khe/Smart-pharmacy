@@ -1,0 +1,13 @@
+
+data/raw/
+
+
+data/processed/sales_history_transactions.csv
+
+.env
+venv/
+.venv/
+
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
