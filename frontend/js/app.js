@@ -1,387 +1,441 @@
-
-/*
- * Smart Pharmacy
- * Interface connectee a FastAPI et MongoDB.
- */
-
-// --------------------------------------------------
-// 1. CONFIGURATION ET DONNEES
-// --------------------------------------------------
+/* ==========================================
+   SMART PHARMACY - APPLICATION JAVASCRIPT
+========================================== */
 
 const API_URL = "http://127.0.0.1:8000/api";
 
-let predictions = [];
+// Données de l'application
 let stocks = [];
-let recommendations = [];
 let alerts = [];
-let statistics = {};
-
+let predictions = [];
 let medicineChart = null;
 let pharmacyChart = null;
 
-// --------------------------------------------------
-// 2. FONCTIONS UTILITAIRES
-// --------------------------------------------------
+// ==========================================
+// 1. UTILITAIRES
+// ==========================================
 
 function getElement(id) {
     return document.getElementById(id);
 }
 
-function formatNumber(value) {
-    return new Intl.NumberFormat("fr-FR", {
-        maximumFractionDigits: 2
-    }).format(Number(value) || 0);
-}
-
 function escapeHTML(value) {
-    return String(value ?? "").replace(/[&<>"']/g, character => ({
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
         "&": "&amp;",
         "<": "&lt;",
         ">": "&gt;",
         '"': "&quot;",
         "'": "&#039;"
-    })[character]);
+    })[char]);
 }
 
-function getMedicineName(item) {
-    const category = item.medicine_category || item.medicine_id;
-    const code = item.atc_code ? ` (${item.atc_code})` : "";
-
-    return `${category}${code}`;
-}
-
-function getPharmacyName(item) {
-    const name = item.pharmacy_name || item.pharmacy_id || "Pharmacie inconnue";
-    const city = item.pharmacy_city ? ` — ${item.pharmacy_city}` : "";
-
-    return `${name}${city}`;
-}
-
-function showMessage(elementId, message) {
-    const element = getElement(elementId);
-
-    if (element) {
-        element.innerHTML = `
-            <tr>
-                <td colspan="5" class="empty-state">${escapeHTML(message)}</td>
-            </tr>
-        `;
+function getValue(object, fields, fallback = "Non renseigné") {
+    for (const field of fields) {
+        if (object?.[field] !== undefined && object[field] !== null) {
+            return object[field];
+        }
     }
+    return fallback;
 }
 
-// --------------------------------------------------
-// 3. RECUPERATION DES DONNEES DEPUIS FASTAPI
-// --------------------------------------------------
+function getArray(response) {
+    if (Array.isArray(response)) return response;
+    if (Array.isArray(response?.data)) return response.data;
+    if (Array.isArray(response?.results)) return response.results;
+    return [];
+}
+
+function formatNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number)
+        ? number.toLocaleString("fr-FR")
+        : "0";
+}
+
+function formatDate(value) {
+    if (!value) return "";
+
+    const date = new Date(value);
+
+    if (Number.isNaN(date.getTime())) return "";
+
+    return date.toLocaleString("fr-FR");
+}
+
+function showMessage(message) {
+    console.log(message);
+}
+
+// ==========================================
+// 2. COMMUNICATION AVEC LE BACKEND
+// ==========================================
 
 async function fetchAPI(endpoint) {
     const response = await fetch(`${API_URL}/${endpoint}`);
 
     if (!response.ok) {
-        throw new Error(`Erreur API ${endpoint} : ${response.status}`);
+        throw new Error(
+            `Erreur API ${endpoint} : ${response.status}`
+        );
     }
 
     return await response.json();
 }
 
-async function loadDashboardData() {
-    const [
-        predictionsResult,
-        stocksResult,
-        recommendationsResult,
-        alertsResult,
-        statisticsResult
-    ] = await Promise.all([
-        fetchAPI("predictions"),
-        fetchAPI("stocks"),
-        fetchAPI("recommendations"),
-        fetchAPI("alerts"),
-        fetchAPI("stats")
-    ]);
-
-    predictions = predictionsResult.data || [];
-    stocks = stocksResult.data || [];
-    recommendations = recommendationsResult.data || [];
-    alerts = alertsResult.data || [];
-    statistics = statisticsResult || {};
-
-    console.log("Données récupérées depuis MongoDB :", {
-        predictions: predictions.length,
-        stocks: stocks.length,
-        recommendations: recommendations.length,
-        alerts: alerts.length
-    });
+async function loadEndpoint(endpoint) {
+    try {
+        return await fetchAPI(endpoint);
+    } catch (error) {
+        console.error(error);
+        return null;
+    }
 }
 
-// --------------------------------------------------
-// 4. AFFICHAGE DES INDICATEURS
-// --------------------------------------------------
+// ==========================================
+// 3. CHARGEMENT DES DONNÉES
+// ==========================================
+
+async function loadDashboardData() {
+    const [stocksResponse, alertsResponse, predictionsResponse] =
+        await Promise.all([
+            loadEndpoint("stocks"),
+            loadEndpoint("alerts"),
+            loadEndpoint("predictions")
+        ]);
+
+    stocks = getArray(stocksResponse);
+    alerts = getArray(alertsResponse);
+    predictions = getArray(predictionsResponse);
+
+    displayMetrics();
+    displayStocks();
+    displayAlerts();
+    displayCharts();
+
+    checkNewAlerts(alerts);
+
+    console.log("Données du tableau de bord actualisées.");
+}
+
+// ==========================================
+// 4. INDICATEURS
+// ==========================================
 
 function displayMetrics() {
-    const pharmaciesCount = new Set(
-        predictions.map(item => item.pharmacy_id)
-    ).size;
+    const pharmacyIds = new Set();
+    const medicineIds = new Set();
 
-    const medicinesCount = new Set(
-        predictions.map(item => item.medicine_id)
-    ).size;
+    stocks.forEach(stock => {
+        const pharmacy = getValue(
+            stock,
+            ["pharmacy_id", "pharmacy_name"],
+            null
+        );
 
-    const criticalCount = alerts.filter(
-        item => item.level === "CRITIQUE"
-    ).length;
+        const medicine = getValue(
+            stock,
+            ["medicine_id", "medicine_name"],
+            null
+        );
 
-    getElement("pharmacy-total").textContent =
-        statistics.total_pharmacies ?? pharmaciesCount;
-
-    getElement("medicine-total").textContent =
-        statistics.total_medicines ?? medicinesCount;
-
-    getElement("replenishment-total").textContent =
-        statistics.to_order ?? recommendations.filter(
-            item => item.status === "A_COMMANDER"
-        ).length;
-
-    getElement("critical-total").textContent = alerts.length;
-
-    const alertCount = getElement("alert-count");
-
-    if (alertCount) {
-        alertCount.textContent = alerts.length;
-    }
-}
-
-// --------------------------------------------------
-// 5. AFFICHAGE DES PREVISIONS
-// --------------------------------------------------
-
-function displayPredictions() {
-    const tbody = getElement("forecasts-table");
-
-    if (!predictions.length) {
-        showMessage("forecasts-table", "Aucune prévision disponible.");
-        return;
-    }
-
-    tbody.innerHTML = predictions.map(item => {
-        const startDate = item.forecast_start_date || "";
-        const endDate = item.forecast_end_date || "";
-
-        const period = startDate && endDate
-            ? `${startDate} – ${endDate}`
-            : "Non renseignée";
-
-        return `
-            <tr>
-                <td><strong>${escapeHTML(getMedicineName(item))}</strong></td>
-                <td>${escapeHTML(getPharmacyName(item))}</td>
-                <td>${formatNumber(item.avg_daily_demand)} unités</td>
-                <td><strong>${formatNumber(item.predicted_demand_7d)} unités</strong></td>
-                <td>${escapeHTML(period)}</td>
-            </tr>
-        `;
-    }).join("");
-}
-
-// --------------------------------------------------
-// 6. AFFICHAGE DES STOCKS
-// --------------------------------------------------
-
-function displayStocks() {
-    const tbody = getElement("stocks-table");
-
-    if (!stocks.length) {
-        showMessage("stocks-table", "Aucun stock disponible.");
-        return;
-    }
-
-    tbody.innerHTML = stocks.map(item => {
-        const quantity = Number(item.quantity) || 0;
-        const threshold = Number(item.min_threshold) || 0;
-        const isLow = quantity <= threshold;
-
-        return `
-            <tr>
-                <td><strong>${escapeHTML(getMedicineName(item))}</strong></td>
-                <td>${escapeHTML(getPharmacyName(item))}</td>
-                <td>${formatNumber(quantity)} unités</td>
-                <td>
-                    <span class="status-label ${isLow ? "status-danger" : "status-success"}">
-                        ${formatNumber(threshold)} unités
-                    </span>
-                </td>
-            </tr>
-        `;
-    }).join("");
-}
-
-// --------------------------------------------------
-// 7. AFFICHAGE DES RECOMMANDATIONS
-// --------------------------------------------------
-
-function displayRecommendations() {
-    const tbody = getElement("replenishment-table");
-
-    if (!recommendations.length) {
-        showMessage("replenishment-table", "Aucune recommandation disponible.");
-        return;
-    }
-
-    tbody.innerHTML = recommendations.map(item => {
-        const toOrder = item.status === "A_COMMANDER";
-
-        return `
-            <tr>
-                <td><strong>${escapeHTML(getMedicineName(item))}</strong></td>
-                <td>${escapeHTML(getPharmacyName(item))}</td>
-                <td><strong>${formatNumber(item.recommended_quantity)} unités</strong></td>
-                <td>
-                    <span class="status-label ${toOrder ? "status-warning" : "status-success"}">
-                        ${toOrder ? "À commander" : "Stock suffisant"}
-                    </span>
-                </td>
-            </tr>
-        `;
-    }).join("");
-}
-
-// --------------------------------------------------
-// 8. AFFICHAGE DES ALERTES
-// --------------------------------------------------
-
-function displayAlerts() {
-    const alertList = getElement("alerts-list");
-
-    getElement("alert-count").textContent = alerts.length;
-
-    if (!alerts.length) {
-        alertList.innerHTML = `
-            <p class="empty-state">Aucune alerte pour le moment.</p>
-        `;
-        return;
-    }
-
-    const sortedAlerts = [...alerts].sort((a, b) => {
-        const priority = { CRITIQUE: 0, ATTENTION: 1 };
-        return (priority[a.level] ?? 2) - (priority[b.level] ?? 2);
+        if (pharmacy !== null) pharmacyIds.add(pharmacy);
+        if (medicine !== null) medicineIds.add(medicine);
     });
 
-    alertList.innerHTML = sortedAlerts.map(item => {
-        const critical = item.level === "CRITIQUE";
+    // Nombre de pharmacies
+    if (getElement("pharmacy-total")) {
+        getElement("pharmacy-total").textContent =
+            formatNumber(pharmacyIds.size);
+    }
 
-        // Les alertes sont enrichies à partir des données déjà chargées.
-        const reference = [...stocks, ...predictions].find(
-            data =>
-                data.medicine_id === item.medicine_id &&
-                data.pharmacy_id === item.pharmacy_id
-        ) || item;
+    // Nombre de médicaments
+    if (getElement("medicine-total")) {
+        getElement("medicine-total").textContent =
+            formatNumber(medicineIds.size);
+    }
+
+    // Nombre d'alertes actives
+    if (getElement("critical-total")) {
+        getElement("critical-total").textContent =
+            formatNumber(alerts.length);
+    }
+
+    // Badge dans le menu latéral
+    if (getElement("alert-count")) {
+        getElement("alert-count").textContent =
+            formatNumber(alerts.length);
+    }
+}
+
+// ==========================================
+// 5. AFFICHAGE DES STOCKS
+// ==========================================
+
+function displayStocks() {
+    const table = getElement("stocks-table");
+
+    if (!table) return;
+
+    if (stocks.length === 0) {
+        table.innerHTML = `
+            <tr>
+                <td colspan="4" class="empty-state">
+                    Aucun stock disponible.
+                </td>
+            </tr>
+        `;
+        return;
+    }
+
+    table.innerHTML = stocks.map(stock => {
+        const medicine = getValue(
+            stock,
+            ["medicine_name", "medicine_category", "medicine_id"]
+        );
+
+        const pharmacy = getValue(
+            stock,
+            ["pharmacy_name", "pharmacy_city", "pharmacy_id"]
+        );
+
+        const quantity = Number(
+            getValue(stock, ["quantity", "current_stock"], 0)
+        );
+
+        const threshold = Number(
+            getValue(stock, ["min_threshold", "minimum_stock"], 0)
+        );
+
+        const stockClass =
+            quantity <= threshold ? "low" : "normal";
 
         return `
-            <article class="alert-item">
-                <div class="alert-icon ${critical ? "critical" : "warning"}">
-                    <i data-lucide="${critical ? "alert-circle" : "alert-triangle"}"></i>
+            <tr>
+                <td>${escapeHTML(medicine)}</td>
+                <td>${escapeHTML(pharmacy)}</td>
+                <td>
+                    <span class="stock-value ${stockClass}">
+                        ${formatNumber(quantity)}
+                    </span>
+                </td>
+                <td>${formatNumber(threshold)}</td>
+            </tr>
+        `;
+    }).join("");
+}
+
+// ==========================================
+// 6. AFFICHAGE DES ALERTES
+// ==========================================
+
+function getAlertType(alert) {
+    const status = String(
+        getValue(alert, ["status", "level", "type"], "")
+    ).toUpperCase();
+
+    if (
+        status.includes("OUT") ||
+        status.includes("RUPTURE") ||
+        status.includes("CRITIQUE")
+    ) {
+        return "out";
+    }
+
+    return "low";
+}
+
+function displayAlerts() {
+    const container = getElement("alerts-list");
+
+    if (!container) return;
+
+    if (alerts.length === 0) {
+        container.innerHTML = `
+            <p class="empty-state">
+                Aucune alerte active. Tous les stocks sont sous surveillance.
+            </p>
+        `;
+        return;
+    }
+
+    container.innerHTML = alerts.map(alert => {
+        const type = getAlertType(alert);
+
+        const medicine = getValue(
+            alert,
+            ["medicine_name", "medicine_category", "medicine_id"]
+        );
+
+        const pharmacy = getValue(
+            alert,
+            ["pharmacy_name", "pharmacy_id"]
+        );
+
+        const message = getValue(
+            alert,
+            ["message"],
+            "Une situation nécessite votre attention."
+        );
+
+        const currentStock = getValue(
+            alert,
+            ["current_stock", "quantity"],
+            null
+        );
+
+        const threshold = getValue(
+            alert,
+            ["min_threshold"],
+            null
+        );
+
+        const date = formatDate(
+            getValue(alert, ["created_at"], null)
+        );
+
+        return `
+            <article class="alert-card ${type}">
+                <div class="alert-card-icon">
+                    <i data-lucide="alert-triangle"></i>
                 </div>
 
-                <div class="alert-content">
+                <div class="alert-card-content">
                     <strong>
-                        ${critical ? "Stock critique" : "Stock à surveiller"}
+                        ${type === "out" ? "Rupture de stock" : "Stock faible"}
+                        - ${escapeHTML(medicine)}
                     </strong>
-                    <p>
-                        ${escapeHTML(getMedicineName(reference))} ·
-                        ${escapeHTML(getPharmacyName(reference))}
-                        · ${escapeHTML(item.message)}
-                        Couverture : ${formatNumber(item.coverage_days)} jours.
-                    </p>
-                </div>
 
-                <span class="status-label ${critical ? "status-danger" : "status-warning"}">
-                    ${critical ? "Critique" : "Attention"}
-                </span>
+                    <p>${escapeHTML(message)}</p>
+
+                    <div class="alert-meta">
+                        Pharmacie : ${escapeHTML(pharmacy)}
+                        ${currentStock !== null
+                            ? ` | Stock actuel : ${escapeHTML(currentStock)}`
+                            : ""}
+                        ${threshold !== null
+                            ? ` | Seuil minimum : ${escapeHTML(threshold)}`
+                            : ""}
+                        ${date ? ` | ${escapeHTML(date)}` : ""}
+                    </div>
+                </div>
             </article>
         `;
     }).join("");
 
-    if (typeof lucide !== "undefined") {
+    if (window.lucide) {
         lucide.createIcons();
     }
 }
 
-// --------------------------------------------------
-// 9. GRAPHIQUES
-// --------------------------------------------------
+// ==========================================
+// 7. GRAPHIQUE : DEMANDE PAR MÉDICAMENT
+// ==========================================
 
-function displayCharts() {
-    if (typeof Chart === "undefined") {
-        console.warn("Chart.js n'a pas pu être chargé.");
-        return;
-    }
+function displayMedicineChart() {
+    const canvas = getElement("medicine-chart");
 
-    // Détruire les anciens graphiques avant actualisation.
-    if (medicineChart) medicineChart.destroy();
-    if (pharmacyChart) pharmacyChart.destroy();
+    if (!canvas || !window.Chart) return;
 
-    // Demande prévue par catégorie de médicament.
-    const medicineTotals = {};
+    const totals = {};
 
     predictions.forEach(item => {
-        const name = getMedicineName(item);
+        const medicine = getValue(
+            item,
+            ["medicine_category", "medicine_name", "medicine_id"],
+            "Autre"
+        );
 
-        medicineTotals[name] =
-            (medicineTotals[name] || 0) +
-            (Number(item.predicted_demand_7d) || 0);
+        const demand = Number(
+            getValue(
+                item,
+                ["predicted_demand_7d", "predicted_demand", "avg_daily_demand"],
+                0
+            )
+        );
+
+        totals[medicine] = (totals[medicine] || 0) + demand;
     });
 
-    medicineChart = new Chart(getElement("medicine-chart"), {
+    const labels = Object.keys(totals);
+    const values = Object.values(totals);
+
+    if (medicineChart) medicineChart.destroy();
+
+    medicineChart = new Chart(canvas, {
         type: "bar",
         data: {
-            labels: Object.keys(medicineTotals),
+            labels: labels.length ? labels : ["Aucune donnée"],
             datasets: [{
-                label: "Demande prévue (unités)",
-                data: Object.values(medicineTotals),
-                backgroundColor: "#47765c",
-                borderRadius: 6,
-                maxBarThickness: 42
+                label: "Demande prévue",
+                data: labels.length ? values : [0],
+                backgroundColor: "#244b3c",
+                borderRadius: 6
             }]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
             plugins: {
-                legend: { display: false }
+                legend: {
+                    display: false
+                }
             },
             scales: {
                 y: {
-                    beginAtZero: true,
-                    grid: { color: "#eeeeea" }
-                },
-                x: {
-                    grid: { display: false }
+                    beginAtZero: true
                 }
             }
         }
     });
+}
 
-    // Répartition de la demande par pharmacie.
-    const pharmacyTotals = {};
+// ==========================================
+// 8. GRAPHIQUE : RÉPARTITION PAR PHARMACIE
+// ==========================================
+
+function displayPharmacyChart() {
+    const canvas = getElement("pharmacy-chart");
+
+    if (!canvas || !window.Chart) return;
+
+    const totals = {};
 
     predictions.forEach(item => {
-        const name = getPharmacyName(item);
+        const pharmacy = getValue(
+            item,
+            ["pharmacy_name", "pharmacy_city", "pharmacy_id"],
+            "Autre"
+        );
 
-        pharmacyTotals[name] =
-            (pharmacyTotals[name] || 0) +
-            (Number(item.predicted_demand_7d) || 0);
+        const demand = Number(
+            getValue(
+                item,
+                ["predicted_demand_7d", "predicted_demand", "avg_daily_demand"],
+                0
+            )
+        );
+
+        totals[pharmacy] = (totals[pharmacy] || 0) + demand;
     });
 
-    pharmacyChart = new Chart(getElement("pharmacy-chart"), {
+    const labels = Object.keys(totals);
+    const values = Object.values(totals);
+
+    if (pharmacyChart) pharmacyChart.destroy();
+
+    pharmacyChart = new Chart(canvas, {
         type: "doughnut",
         data: {
-            labels: Object.keys(pharmacyTotals),
+            labels: labels.length ? labels : ["Aucune donnée"],
             datasets: [{
-                data: Object.values(pharmacyTotals),
+                data: labels.length ? values : [1],
                 backgroundColor: [
-                    "#244c3b",
-                    "#c4775b",
-                    "#d8c6a3",
-                    "#819b82",
-                    "#b8a58b"
+                    "#244b3c",
+                    "#bd795c",
+                    "#d8c6a5",
+                    "#829b87",
+                    "#c7a16c",
+                    "#a8b9ad"
                 ],
                 borderWidth: 2,
                 borderColor: "#ffffff"
@@ -392,101 +446,203 @@ function displayCharts() {
             maintainAspectRatio: false,
             plugins: {
                 legend: {
-                    position: "bottom",
-                    labels: {
-                        usePointStyle: true,
-                        padding: 15,
-                        font: { size: 10 }
-                    }
+                    position: "bottom"
                 }
             }
         }
     });
 }
 
-// --------------------------------------------------
-// 10. DATE ET ACTUALISATION
-// --------------------------------------------------
+function displayCharts() {
+    displayMedicineChart();
+    displayPharmacyChart();
+}
+
+// ==========================================
+// 9. NOTIFICATIONS TOAST
+// ==========================================
+
+function getToastContainer() {
+    let container = getElement("toast-container");
+
+    if (!container) {
+        container = document.createElement("div");
+        container.id = "toast-container";
+        container.className = "toast-container";
+        document.body.appendChild(container);
+    }
+
+    return container;
+}
+
+function getAlertKey(alert) {
+    const id = alert._id || alert.id;
+
+    if (id) return String(id);
+
+    return [
+        alert.pharmacy_id,
+        alert.medicine_id,
+        alert.created_at || alert.updated_at || ""
+    ].join("_");
+}
+
+function getNotifiedAlerts() {
+    try {
+        return JSON.parse(
+            localStorage.getItem("smart_pharmacy_notified_alerts") || "[]"
+        );
+    } catch {
+        return [];
+    }
+}
+
+function saveNotifiedAlerts(keys) {
+    try {
+        localStorage.setItem(
+            "smart_pharmacy_notified_alerts",
+            JSON.stringify(keys.slice(-300))
+        );
+    } catch (error) {
+        console.warn("Impossible de sauvegarder les notifications.", error);
+    }
+}
+
+function showToast(alert) {
+    const container = getToastContainer();
+    const type = getAlertType(alert);
+
+    const medicine = getValue(
+        alert,
+        ["medicine_name", "medicine_category", "medicine_id"]
+    );
+
+    const message = getValue(
+        alert,
+        ["message"],
+        "Une situation nécessite votre attention."
+    );
+
+    const toast = document.createElement("div");
+
+    toast.className = `toast ${type === "out" ? "toast--out" : "toast--low"}`;
+
+    toast.innerHTML = `
+        <div class="toast-icon">
+            <i data-lucide="alert-triangle"></i>
+        </div>
+
+        <div class="toast-body">
+            <div class="toast-title">
+                ${type === "out" ? "Rupture de stock" : "Stock faible"}
+            </div>
+
+            <div class="toast-message">
+                ${escapeHTML(medicine)} : ${escapeHTML(message)}
+            </div>
+        </div>
+
+        <button class="toast-close" aria-label="Fermer">
+            &times;
+        </button>
+
+        <div class="toast-progress"></div>
+    `;
+
+    container.appendChild(toast);
+
+    if (window.lucide) {
+        lucide.createIcons();
+    }
+
+    const closeToast = () => {
+        toast.remove();
+    };
+
+    toast.querySelector(".toast-close").addEventListener(
+        "click",
+        closeToast
+    );
+
+    setTimeout(closeToast, 8000);
+}
+
+function checkNewAlerts(currentAlerts) {
+    const notified = getNotifiedAlerts();
+
+    currentAlerts.forEach(alert => {
+        const key = getAlertKey(alert);
+
+        if (!notified.includes(key)) {
+            showToast(alert);
+            notified.push(key);
+        }
+    });
+
+    saveNotifiedAlerts(notified);
+}
+
+// ==========================================
+// 10. ACTUALISATION DES ALERTES
+// ==========================================
+
+async function refreshAlerts() {
+    const response = await loadEndpoint("alerts");
+
+    if (response === null) return;
+
+    alerts = getArray(response);
+
+    displayAlerts();
+    displayMetrics();
+    checkNewAlerts(alerts);
+}
+
+// ==========================================
+// 11. INITIALISATION
+// ==========================================
 
 function displayCurrentDate() {
-    const today = new Date();
+    const element = getElement("current-date");
 
-    getElement("current-date").textContent =
-        today.toLocaleDateString("fr-FR", {
+    if (!element) return;
+
+    element.textContent = new Date().toLocaleDateString(
+        "fr-FR",
+        {
             weekday: "long",
             day: "numeric",
             month: "long",
             year: "numeric"
-        });
+        }
+    );
 }
 
-// --------------------------------------------------
-// 11. INITIALISATION DU TABLEAU DE BORD
-// --------------------------------------------------
+function initializeDashboard() {
+    displayCurrentDate();
 
-async function initializeDashboard() {
+    if (window.lucide) {
+        lucide.createIcons();
+    }
+
     const refreshButton = getElement("refresh-button");
 
     if (refreshButton) {
-        refreshButton.disabled = true;
+        refreshButton.addEventListener("click", async () => {
+            refreshButton.disabled = true;
+
+            try {
+                await loadDashboardData();
+            } finally {
+                refreshButton.disabled = false;
+            }
+        });
     }
 
-    try {
-        await loadDashboardData();
+    loadDashboardData();
 
-        displayCurrentDate();
-        displayMetrics();
-        displayPredictions();
-        displayStocks();
-        displayRecommendations();
-        displayAlerts();
-        displayCharts();
-
-        if (typeof lucide !== "undefined") {
-            lucide.createIcons();
-        }
-
-        console.log("Tableau de bord actualisé avec succès.");
-
-    } catch (error) {
-        console.error("Erreur de chargement :", error);
-
-        const message =
-            "Impossible de charger les données. Vérifiez que FastAPI et MongoDB fonctionnent.";
-
-        showMessage("forecasts-table", message);
-        showMessage("stocks-table", message);
-        showMessage("replenishment-table", message);
-
-        getElement("alerts-list").innerHTML = `
-            <p class="empty-state">${escapeHTML(message)}</p>
-        `;
-
-    } finally {
-        if (refreshButton) {
-            refreshButton.disabled = false;
-        }
-    }
+    // Vérification des nouvelles alertes toutes les 30 secondes
+    setInterval(refreshAlerts, 30000);
 }
 
-// --------------------------------------------------
-// 12. NAVIGATION ET EVENEMENTS
-// --------------------------------------------------
-
-document.addEventListener("DOMContentLoaded", () => {
-    document.querySelectorAll(".nav-link").forEach(link => {
-        link.addEventListener("click", () => {
-            document.querySelectorAll(".nav-link").forEach(item => {
-                item.classList.remove("active");
-            });
-
-            link.classList.add("active");
-        });
-    });
-
-    getElement("refresh-button").addEventListener("click", () => {
-        initializeDashboard();
-    });
-
-    initializeDashboard();
-});
+document.addEventListener("DOMContentLoaded", initializeDashboard);

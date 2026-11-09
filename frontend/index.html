@@ -187,21 +187,13 @@
                         <span>Vue d'ensemble</span>
                     </a>
 
-                    <a href="#forecasts" class="nav-link">
-                        <i data-lucide="chart-no-axes-combined"></i>
-                        <span>Prévisions</span>
-                    </a>
-
+                   
                     <a href="#stocks" class="nav-link">
                         <i data-lucide="package"></i>
                         <span>Gestion des stocks</span>
                     </a>
 
-                    <a href="#replenishment" class="nav-link">
-                        <i data-lucide="truck"></i>
-                        <span>Réapprovisionnement</span>
-                    </a>
-
+                   
                     <a href="#alerts" class="nav-link">
                         <i data-lucide="bell"></i>
                         <span>Alertes</span>
@@ -213,18 +205,6 @@
                         <span>Statistiques</span>
                     </a>
                 </nav>
-            </div>
-
-            <div class="sidebar-bottom">
-                <div class="system-status">
-                    <span class="status-dot"></span>
-                    <div>
-                        <strong>Système connecté</strong>
-                        <small>Surveillance active</small>
-                    </div>
-                </div>
-
-                <p class="sidebar-footer">Smart Pharmacy · Big Data</p>
             </div>
         </aside>
 
@@ -256,31 +236,7 @@
                         les besoins de réapprovisionnement.
                     </p>
                 </div>
-
-                <div class="welcome-decoration">
-                    <i data-lucide="activity"></i>
-                    <span>Analyse des données</span>
-                    <strong>Big Data & Intelligence artificielle</strong>
-                </div>
             </section>
-
-            <!-- Information sur les données historiques -->
-            <div class="historical-notice">
-                <span class="notice-icon">ⓘ</span>
-
-                <div>
-                    <strong>Attention : données historiques</strong>
-                    <p>
-                        Les prévisions affichées couvrent la période du
-                        09/10/2019 au 15/10/2019 et sont calculées à partir
-                        des ventes historiques jusqu'au 08/10/2019.
-                        Les stocks ont été actualisés en novembre 2026.
-                        Par conséquent, les recommandations de
-                        réapprovisionnement sont fournies à titre illustratif
-                        et ne représentent pas des commandes opérationnelles actuelles.
-                    </p>
-                </div>
-            </div>
 
             <!-- Indicateurs -->
             <section class="metrics-grid">
@@ -307,16 +263,7 @@
                     <small>Références suivies</small>
                 </article>
 
-                <article class="metric-card">
-                    <div class="metric-top">
-                        <span>À réapprovisionner</span>
-                        <div class="metric-icon terracotta">
-                            <i data-lucide="shopping-cart"></i>
-                        </div>
-                    </div>
-                    <strong id="replenishment-total">--</strong>
-                    <small>Recommandations générées</small>
-                </article>
+               
 
                 <article class="metric-card">
                     <div class="metric-top">
@@ -329,44 +276,6 @@
                     <small>Situations à examiner</small>
                 </article>
 
-            </section>
-
-            <!-- Prévisions -->
-            <section class="content-section" id="forecasts">
-                <div class="section-heading">
-                    <div>
-                        <p class="eyebrow">ANTICIPATION</p>
-                        <h2>Prévisions de la demande</h2>
-                        <p>Estimation des besoins en médicaments sur 7 jours.</p>
-                    </div>
-
-                    <span class="section-tag">
-                        <i data-lucide="brain-circuit"></i>
-                        Modèle prédictif
-                    </span>
-                </div>
-
-                <div class="table-container">
-                    <table>
-                        <thead>
-                            <tr>
-                                <th>Médicament</th>
-                                <th>Pharmacie</th>
-                                <th>Demande moyenne / jour</th>
-                                <th>Demande prévue (7 jours)</th>
-                                <th>Période</th>
-                            </tr>
-                        </thead>
-
-                        <tbody id="forecasts-table">
-                            <tr>
-                                <td colspan="5" class="empty-state">
-                                    Chargement des prévisions...
-                                </td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
             </section>
 
             <!-- Stocks et réapprovisionnement -->
@@ -396,37 +305,6 @@
                                 <tr>
                                     <td colspan="4" class="empty-state">
                                         Chargement des stocks...
-                                    </td>
-                                </tr>
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                <div id="replenishment">
-                    <div class="section-heading">
-                        <div>
-                            <p class="eyebrow">ACTION RECOMMANDÉE</p>
-                            <h2>Réapprovisionnement</h2>
-                            <p>Quantités suggérées par le système.</p>
-                        </div>
-                    </div>
-
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Médicament</th>
-                                    <th>Pharmacie</th>
-                                    <th>Quantité</th>
-                                    <th>Statut</th>
-                                </tr>
-                            </thead>
-
-                            <tbody id="replenishment-table">
-                                <tr>
-                                    <td colspan="4" class="empty-state">
-                                        Chargement des recommandations...
                                     </td>
                                 </tr>
                             </tbody>
@@ -478,8 +356,8 @@
 
             <!-- Pied de page -->
             <footer class="page-footer">
-                <span>Smart Pharmacy · Projet Big Data</span>
-                <span>Prévisions issues des données historiques</span>
+                <span>Smart Pharmacy</span>
+                
             </footer>
 
         </main>
